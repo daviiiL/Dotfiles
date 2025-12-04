@@ -58,6 +58,7 @@ echo ""
 sleep 0.3
 
 DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
+BACKUP_DIR="$HOME/.config/dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
 for config_dir in "$DOTFILES_DIR/config_dots"/*; do
   if [ -d "$config_dir" ]; then
@@ -65,9 +66,8 @@ for config_dir in "$DOTFILES_DIR/config_dots"/*; do
     target_path="$HOME/.config/$dir_name"
 
     if [ -e "$target_path" ]; then
-      backup_path="$HOME/.config/${dir_name}_original_backup"
       echo ""
-      print_warning "Found existing $dir_name directory. Backing up to ${dir_name}_original_backup..."
+      print_warning "Found existing $dir_name directory. Backing up to $BACKUP_DIR/$dir_name..."
       echo ""
 
       read -p "$(echo -e ${YELLOW}Do you want to proceed with backing up this folder? \(y/n\): ${NC})" -n 1 -r
@@ -78,13 +78,9 @@ for config_dir in "$DOTFILES_DIR/config_dots"/*; do
         continue
       fi
 
-      if [ -e "$backup_path" ]; then
-        print_warning "Removing existing backup at $backup_path..."
-        rm -rf "$backup_path"
-      fi
-
-      mv "$target_path" "$backup_path"
-      print_success "Backup complete: $backup_path"
+      mkdir -p "$BACKUP_DIR"
+      mv "$target_path" "$BACKUP_DIR/$dir_name"
+      print_success "Backup complete: $BACKUP_DIR/$dir_name"
       echo ""
     fi
 
@@ -132,7 +128,8 @@ if [ -f "$WEZTERM_BINARY" ]; then
       rm "$WEZTERM_LINK"
     elif [ -e "$WEZTERM_LINK" ]; then
       print_warning "Found existing wezterm file (not a symlink). Backing up..."
-      mv "$WEZTERM_LINK" "${WEZTERM_LINK}.backup"
+      mkdir -p "$BACKUP_DIR"
+      mv "$WEZTERM_LINK" "$BACKUP_DIR/wezterm"
     fi
 
     ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
@@ -193,7 +190,8 @@ echo ""
       rm "$WEZTERM_LINK"
     elif [ -e "$WEZTERM_LINK" ]; then
       print_warning "Found existing wezterm file (not a symlink). Backing up..."
-      mv "$WEZTERM_LINK" "${WEZTERM_LINK}.backup"
+      mkdir -p "$BACKUP_DIR"
+      mv "$WEZTERM_LINK" "$BACKUP_DIR/wezterm"
     fi
 
     ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
