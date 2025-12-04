@@ -73,15 +73,17 @@ for config_dir in "$DOTFILES_DIR/config_dots"/*; do
       read -p "$(echo -e ${YELLOW}Do you want to proceed with backing up this folder? \(y/n\): ${NC})" -n 1 -r
       echo ""
 
-      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Skipping $dir_name..."
-        continue
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        mkdir -p "$BACKUP_DIR"
+        mv "$target_path" "$BACKUP_DIR/$dir_name"
+        print_success "Backup complete: $BACKUP_DIR/$dir_name"
+        echo ""
+      else
+        print_warning "Removing existing $dir_name directory without backup..."
+        rm -rf "$target_path"
+        print_info "Removed $dir_name"
+        echo ""
       fi
-
-      mkdir -p "$BACKUP_DIR"
-      mv "$target_path" "$BACKUP_DIR/$dir_name"
-      print_success "Backup complete: $BACKUP_DIR/$dir_name"
-      echo ""
     fi
 
     print_info "Creating symlink for $dir_name..."
