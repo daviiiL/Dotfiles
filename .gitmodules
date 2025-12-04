@@ -1,0 +1,12 @@
+[submodule "config_dots/wezterm"]
+	path = config_dots/wezterm
+	url = https://github.com/daviiiL/wezterm.git
+[submodule "config_dots/hypr"]
+	path = config_dots/hypr
+	url = https://github.com/daviiiL/hypr.git
+[submodule "config_dots/matugen"]
+	path = config_dots/matugen
+	url = https://github.com/daviiiL/matugen.git
+[submodule "config_dots/quickshell"]
+	path = config_dots/quickshell
+	url = https://github.com/daviiiL/quickshell.git
