@@ -1,15 +1,12 @@
 #!/bin/bash
 
-# Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
-NC='\033[0m' # No Color
-
-# Print functions
+NC='\033[0m'
 print_header() {
   echo -e "${BOLD}$1${NC}"
 }
@@ -34,7 +31,6 @@ print_separator() {
   echo -e "${BLUE}────────────────────────────────────────────────────────${NC}"
 }
 
-# Main script
 clear
 echo ""
 print_error "################################################################"
@@ -103,22 +99,122 @@ print_separator
 print_success "All dotfiles have been successfully linked!"
 print_separator
 echo ""
-# if [ "$EUID" -ne 0 ]; then
-#   echo "This script requires root privileges. Please enter your password."
-#   exec sudo "$0" "$@"
-# fi
-#
-# echo "Root privileges detected... Proceeding..."
-#
-# sleep 0.5
-#
-# echo "Starting full system upgrade..."
-# paru -Syu
-#
-# sleep 0.5
-#
-# echo "Installing core packages..."
-#
-# sleep 0.5
-#
-# paru -S matugen quickshell-git
+
+sleep 0.3
+echo ""
+print_separator
+print_header "Setting up WezTerm..."
+print_separator
+echo ""
+sleep 0.3
+
+WEZTERM_DIR="$DOTFILES_DIR/gitsources/wezterm"
+WEZTERM_BINARY="$WEZTERM_DIR/target/release/wezterm"
+LOCAL_BIN="$HOME/.local/bin"
+WEZTERM_LINK="$LOCAL_BIN/wezterm"
+
+if [ -f "$WEZTERM_BINARY" ]; then
+  print_info "WezTerm binary already built at $WEZTERM_BINARY"
+
+  if [ -L "$WEZTERM_LINK" ] && [ "$(readlink -f "$WEZTERM_LINK")" == "$(readlink -f "$WEZTERM_BINARY")" ]; then
+    print_success "WezTerm symlink already exists and is correct. Skipping setup."
+    echo ""
+    print_separator
+    print_success "WezTerm setup complete!"
+    print_separator
+    echo ""
+  else
+    print_info "WezTerm binary exists but symlink needs to be created..."
+    mkdir -p "$LOCAL_BIN"
+
+    if [ -L "$WEZTERM_LINK" ]; then
+      print_warning "Removing existing wezterm symlink..."
+      rm "$WEZTERM_LINK"
+    elif [ -e "$WEZTERM_LINK" ]; then
+      print_warning "Found existing wezterm file (not a symlink). Backing up..."
+      mv "$WEZTERM_LINK" "${WEZTERM_LINK}.backup"
+    fi
+
+    ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
+    print_success "Created symlink: $WEZTERM_LINK -> $WEZTERM_BINARY"
+    echo ""
+    print_separator
+    print_success "WezTerm setup complete!"
+    print_separator
+    echo ""
+  fi
+else
+  print_info "WezTerm needs to be built..."
+  echo ""
+
+  if command -v rustc &> /dev/null; then
+  print_success "Rust is already installed ($(rustc --version))"
+else
+  print_info "Rust not detected. Installing via rustup..."
+  curl https://sh.rustup.rs -sSf | sh -s -- -y
+
+  source "$HOME/.cargo/env"
+
+  print_success "Rust installed successfully!"
+fi
+
+echo ""
+
+  if [ -d "$WEZTERM_DIR" ]; then
+    print_info "WezTerm repository already exists at $WEZTERM_DIR"
+  else
+    print_info "Cloning WezTerm repository..."
+    mkdir -p "$DOTFILES_DIR/gitsources"
+    git clone --depth=1 --branch=main --recursive https://github.com/wezterm/wezterm.git "$WEZTERM_DIR"
+    print_success "WezTerm cloned successfully!"
+  fi
+
+  echo ""
+  print_info "Updating WezTerm submodules..."
+  cd "$WEZTERM_DIR"
+  git submodule update --init --recursive
+
+  echo ""
+  print_info "Installing WezTerm dependencies..."
+  ./get-deps
+
+  echo ""
+  print_info "Building WezTerm (this may take a while)..."
+  cargo build --release
+
+  if [ $? -eq 0 ]; then
+    print_success "WezTerm built successfully!"
+    echo ""
+
+    mkdir -p "$LOCAL_BIN"
+
+    if [ -L "$WEZTERM_LINK" ]; then
+      print_warning "Removing existing wezterm symlink..."
+      rm "$WEZTERM_LINK"
+    elif [ -e "$WEZTERM_LINK" ]; then
+      print_warning "Found existing wezterm file (not a symlink). Backing up..."
+      mv "$WEZTERM_LINK" "${WEZTERM_LINK}.backup"
+    fi
+
+    ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
+    print_success "Created symlink: $WEZTERM_LINK -> $WEZTERM_BINARY"
+
+    echo ""
+    read -p "$(echo -e ${YELLOW}Do you want to run WezTerm now? \(y/n\): ${NC})" -n 1 -r
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      "$WEZTERM_LINK" start
+    fi
+  else
+    print_error "WezTerm build failed. Please check the errors above."
+  fi
+
+  cd "$DOTFILES_DIR"
+
+  echo ""
+  print_separator
+  print_success "WezTerm setup complete!"
+  print_separator
+  echo ""
+fi
