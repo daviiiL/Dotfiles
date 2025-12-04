@@ -57,44 +57,29 @@ print_separator
 echo ""
 sleep 0.3
 
-DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKUP_DIR="$HOME/.config/dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
+SUBMODULE_PATH="$(cd "$(dirname "$0")" && pwd)"
+BACKUP_DIR="$HOME/.config/Dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
-for config_dir in "$DOTFILES_DIR/config_dots"/*; do
-  if [ -d "$config_dir" ]; then
-    dir_name=$(basename "$config_dir")
-    target_path="$HOME/.config/$dir_name"
-
-    if [ -e "$target_path" ]; then
+for module_name in "quickshell" "hypr" "matugen" "wezterm"; do
+  if [ -e "$HOME/.config/$module_name" ]; then
+    read -p "$(echo -e "${YELLOW}Moving previous $module_name configuration to $BACKUP_DIR/$module_name? Previous config will be overwritten if not backed up... [Y/n]: ${NC}")" -n 1 -r
+    REPLY=${REPLY:-Y}
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      mkdir -p "$BACKUP_DIR"
+      mv "$HOME/.config/$module_name" "$BACKUP_DIR/$module_name"
+      print_success "Backup complete: $BACKUP_DIR/$module_name"
       echo ""
-      print_warning "Found existing $dir_name directory. Backing up to $BACKUP_DIR/$dir_name..."
-      echo ""
-
-      read -p "$(echo -e ${YELLOW}Do you want to proceed with backing up this folder? \(y/n\): ${NC})" -n 1 -r
-      echo ""
-
-      if [[ $REPLY =~ ^[Yy]$ ]]; then
-        mkdir -p "$BACKUP_DIR"
-        mv "$target_path" "$BACKUP_DIR/$dir_name"
-        print_success "Backup complete: $BACKUP_DIR/$dir_name"
-        echo ""
-      else
-        print_warning "Removing existing $dir_name directory without backup..."
-        rm -rf "$target_path"
-        print_info "Removed $dir_name"
-        echo ""
-      fi
     fi
-
-    print_info "Creating symlink for $dir_name..."
-    ln -s "$config_dir" "$target_path"
-    print_success "Linked $dir_name"
   fi
+
+  print_info "Creating symlink for $module_name..."
+  ln -s "$SUBMODULE_PATH/config_dots/$module_name" "$HOME/.config/$module_name"
+  print_success "$module_name linked..."
 done
 
 echo ""
 print_separator
-print_success "All dotfiles have been successfully linked!"
+print_success "Configurations synced..."
 print_separator
 echo ""
 
@@ -106,108 +91,56 @@ print_separator
 echo ""
 sleep 0.3
 
-WEZTERM_DIR="$DOTFILES_DIR/gitsources/wezterm"
+WEZTERM_DIR="$SUBMODULE_PATH/gitsources/wezterm"
 WEZTERM_BINARY="$WEZTERM_DIR/target/release/wezterm"
 LOCAL_BIN="$HOME/.local/bin"
 WEZTERM_LINK="$LOCAL_BIN/wezterm"
 
+setup_wezterm_symlink() {
+    mkdir -p "$LOCAL_BIN"
+    [ -e "$WEZTERM_LINK" ] && rm -f "$WEZTERM_LINK"
+    ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
+    print_success "WezTerm symlink created: $WEZTERM_LINK"
+}
+
 if [ -f "$WEZTERM_BINARY" ]; then
-  print_info "WezTerm binary already built at $WEZTERM_BINARY"
-
-  if [ -L "$WEZTERM_LINK" ] && [ "$(readlink -f "$WEZTERM_LINK")" == "$(readlink -f "$WEZTERM_BINARY")" ]; then
-    print_success "WezTerm symlink already exists and is correct. Skipping setup."
-    echo ""
-    print_separator
-    print_success "WezTerm setup complete!"
-    print_separator
-    echo ""
-  else
-    print_info "WezTerm binary exists but symlink needs to be created..."
-    mkdir -p "$LOCAL_BIN"
-
-    if [ -L "$WEZTERM_LINK" ]; then
-      print_warning "Removing existing wezterm symlink..."
-      rm "$WEZTERM_LINK"
-    elif [ -e "$WEZTERM_LINK" ]; then
-      print_warning "Found existing wezterm file (not a symlink). Backing up..."
-      mkdir -p "$BACKUP_DIR"
-      mv "$WEZTERM_LINK" "$BACKUP_DIR/wezterm"
+    print_info "WezTerm binary found, skipping build..."
+    if [ ! -L "$WEZTERM_LINK" ] || [ "$(readlink -f "$WEZTERM_LINK")" != "$(readlink -f "$WEZTERM_BINARY")" ]; then
+        setup_wezterm_symlink
+    else
+        print_success "WezTerm symlink already configured correctly"
     fi
-
-    ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
-    print_success "Created symlink: $WEZTERM_LINK -> $WEZTERM_BINARY"
-    echo ""
-    print_separator
-    print_success "WezTerm setup complete!"
-    print_separator
-    echo ""
-  fi
 else
-  print_info "WezTerm needs to be built..."
-  echo ""
+    print_info "Building WezTerm from source..."
 
-  if command -v rustc &>/dev/null; then
-    print_success "Rust is already installed ($(rustc --version))"
-  else
-    print_info "Rust not detected. Installing via rustup..."
-    curl https://sh.rustup.rs -sSf | sh -s -- -y
+    command -v rustc &>/dev/null || {
+        print_info "Installing Rust..."
+        curl https://sh.rustup.rs -sSf | sh -s -- -y
+    }
 
-    source "$HOME/.cargo/env"
+    [ ! -d "$WEZTERM_DIR" ] && {
+        print_info "Cloning WezTerm repository..."
+        git clone --depth=1 --branch=main --recursive https://github.com/wez/wezterm.git "$WEZTERM_DIR"
+    }
 
-    print_success "Rust installed successfully!"
-  fi
+    cd "$WEZTERM_DIR" || exit 1
+    git submodule update --init --recursive
+    ./get-deps
+    cargo build --release
 
-  echo ""
-
-  if [ -d "$WEZTERM_DIR" ]; then
-    print_info "WezTerm repository already exists at $WEZTERM_DIR"
-  else
-    print_info "Cloning WezTerm repository..."
-    mkdir -p "$DOTFILES_DIR/gitsources"
-    git clone --depth=1 --branch=main --recursive https://github.com/wezterm/wezterm.git "$WEZTERM_DIR"
-    print_success "WezTerm cloned successfully!"
-  fi
-
-  echo ""
-  print_info "Updating WezTerm submodules..."
-  cd "$WEZTERM_DIR"
-  git submodule update --init --recursive
-
-  echo ""
-  print_info "Installing WezTerm dependencies..."
-  ./get-deps
-
-  echo ""
-  print_info "Building WezTerm (this may take a while)..."
-  cargo build --release
-
-  if [ $? -eq 0 ]; then
-    print_success "WezTerm built successfully!"
-    echo ""
-
-    mkdir -p "$LOCAL_BIN"
-
-    if [ -L "$WEZTERM_LINK" ]; then
-      print_warning "Removing existing wezterm symlink..."
-      rm "$WEZTERM_LINK"
-    elif [ -e "$WEZTERM_LINK" ]; then
-      print_warning "Found existing wezterm file (not a symlink). Backing up..."
-      mkdir -p "$BACKUP_DIR"
-      mv "$WEZTERM_LINK" "$BACKUP_DIR/wezterm"
+    if [ $? -eq 0 ]; then
+        print_success "WezTerm built..."
+        setup_wezterm_symlink
+    else
+        print_error "WezTerm build failed... Exiting..."
+        exit 1
     fi
 
-    ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
-    print_success "Created symlink: $WEZTERM_LINK -> $WEZTERM_BINARY"
-
-  else
-    print_error "WezTerm build failed. Please check the errors above."
-  fi
-
-  cd "$DOTFILES_DIR"
-
-  echo ""
-  print_separator
-  print_success "WezTerm setup complete!"
-  print_separator
-  echo ""
+    cd "$SUBMODULE_PATH" || exit 1
 fi
+
+echo ""
+print_separator
+print_success "Dotfiles setup complete..."
+print_separator
+echo ""
