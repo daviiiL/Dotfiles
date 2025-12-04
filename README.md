@@ -1,0 +1,3 @@
+# daviiiL's current hyprland shell dotfiles
+
+> NOTE: the setup script is only for Arch distros...
