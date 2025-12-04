@@ -146,18 +146,18 @@ else
   print_info "WezTerm needs to be built..."
   echo ""
 
-  if command -v rustc &> /dev/null; then
-  print_success "Rust is already installed ($(rustc --version))"
-else
-  print_info "Rust not detected. Installing via rustup..."
-  curl https://sh.rustup.rs -sSf | sh -s -- -y
+  if command -v rustc &>/dev/null; then
+    print_success "Rust is already installed ($(rustc --version))"
+  else
+    print_info "Rust not detected. Installing via rustup..."
+    curl https://sh.rustup.rs -sSf | sh -s -- -y
 
-  source "$HOME/.cargo/env"
+    source "$HOME/.cargo/env"
 
-  print_success "Rust installed successfully!"
-fi
+    print_success "Rust installed successfully!"
+  fi
 
-echo ""
+  echo ""
 
   if [ -d "$WEZTERM_DIR" ]; then
     print_info "WezTerm repository already exists at $WEZTERM_DIR"
@@ -199,13 +199,6 @@ echo ""
     ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
     print_success "Created symlink: $WEZTERM_LINK -> $WEZTERM_BINARY"
 
-    echo ""
-    read -p "$(echo -e ${YELLOW}Do you want to run WezTerm now? \(y/n\): ${NC})" -n 1 -r
-    echo ""
-
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-      "$WEZTERM_LINK" start
-    fi
   else
     print_error "WezTerm build failed. Please check the errors above."
   fi
