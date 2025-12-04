@@ -148,5 +148,11 @@ fi
 echo ""
 print_separator
 print_success "Dotfiles setup complete..."
+print_success "Reloading Hyprland Configurations..."
+
+hyprctl reload
+
+print_success "DONE"
+
 print_separator
 echo ""
