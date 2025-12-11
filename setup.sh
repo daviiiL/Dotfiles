@@ -7,6 +7,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
+
 print_header() {
   echo -e "${BOLD}$1${NC}"
 }
@@ -31,128 +32,400 @@ print_separator() {
   echo -e "${BLUE}────────────────────────────────────────────────────────${NC}"
 }
 
-clear
-echo ""
-print_error "################################################################"
-print_error "#                                                              #"
-print_error "# WARNING: This script will not work on non-Arch distributions #"
-print_error "#                                                              #"
-print_error "################################################################"
-echo ""
-echo ""
+print_section() {
+  echo ""
+  print_separator
+  print_header "$1"
+  print_separator
+  echo ""
+}
 
-print_separator
-print_header "Fetching git submodules..."
-print_separator
-echo ""
-sleep 0.3
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FLAG_FILE="$HOME/.config/.dotfiles_setup_complete"
 
-git submodule update --init --recursive
+check_setup_flag() {
+  [ -f "$FLAG_FILE" ]
+}
 
-sleep 0.3
-echo ""
-print_separator
-print_header "Populating dotfiles to \$HOME/.config..."
-print_separator
-echo ""
-sleep 0.3
+create_setup_flag() {
+  mkdir -p "$(dirname "$FLAG_FILE")"
+  cat > "$FLAG_FILE" << EOF
+Date: $(date '+%Y-%m-%d %H:%M:%S')
+Script location: $SCRIPT_DIR
+Delete this file to run full first-time setup again
+EOF
+  print_success "Setup flag created: $FLAG_FILE"
+}
 
-SUBMODULE_PATH="$(cd "$(dirname "$0")" && pwd)"
-BACKUP_DIR="$HOME/.config/Dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
+show_menu() {
+  clear
+  echo ""
+  print_separator
+  print_header "        Dotfiles Setup - Already Initialized"
+  print_separator
+  echo ""
+  print_info "Previous setup detected. What would you like to do?"
+  echo ""
+  echo "  [1] Update dotfiles only"
+  echo "      └─ Update config_dots submodules + refresh copies"
+  echo ""
+  echo "  [2] Update WezTerm only"
+  echo "      └─ Pull latest from wezterm submodule + rebuild"
+  echo ""
+  echo "  [3] Update both dotfiles and WezTerm"
+  echo "      └─ Complete update of all components"
+  echo ""
+  echo "  [4] Run full setup (with all prompts)"
+  echo "      └─ Same as first-time installation"
+  echo ""
+  echo "  [5] Exit"
+  echo ""
+  print_separator
+  read -p "$(echo -e "${CYAN}Enter your choice [1-5]: ${NC}")" -n 1 -r
+  echo ""
+  MENU_CHOICE=$REPLY
+}
 
-for module_name in "quickshell" "hypr" "matugen" "wezterm"; do
-  if [ -e "$HOME/.config/$module_name" ]; then
-    read -p "$(echo -e "${YELLOW}Moving previous $module_name configuration to $BACKUP_DIR/$module_name? Previous config will be overwritten if not backed up... [Y/n]: ${NC}")" -n 1 -r
-    REPLY=${REPLY:-Y}
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+handle_menu_choice() {
+  case $MENU_CHOICE in
+    1)
+      print_info "Updating dotfiles only..."
+      update_dotfiles
+      print_success "Dotfiles update complete!"
+      ;;
+    2)
+      print_info "Updating WezTerm only..."
+      update_wezterm_from_remote
+      print_success "WezTerm update complete!"
+      ;;
+    3)
+      print_info "Updating both dotfiles and WezTerm..."
+      update_dotfiles
+      update_wezterm_from_remote
+      print_success "Full update complete!"
+      ;;
+    4)
+      print_info "Running full setup..."
+      clear
+      full_setup
+      ;;
+    5)
+      print_info "Exiting..."
+      exit 0
+      ;;
+    *)
+      print_error "Invalid choice. Exiting..."
+      exit 1
+      ;;
+  esac
+}
+
+update_dotfiles() {
+  print_section "Updating git submodules..."
+
+  if ! git submodule update --init --remote --recursive config_dots/; then
+    print_error "Failed to update git submodules"
+    return 1
+  fi
+
+  print_section "Refreshing dotfiles in \$HOME/.config..."
+
+  mkdir -p "$HOME/.config"
+
+  for module_name in "quickshell" "hypr" "matugen" "wezterm"; do
+    if [ ! -d "$SCRIPT_DIR/config_dots/$module_name" ]; then
+      print_error "Submodule $module_name not found. Run 'git submodule update --init' first."
+      continue
+    fi
+
+    if [ -e "$HOME/.config/$module_name" ] || [ -L "$HOME/.config/$module_name" ]; then
+      BACKUP_DIR="$HOME/.config/Dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
+      read -p "$(echo -e "${YELLOW}Directory $module_name exists. Backup to $BACKUP_DIR? [Y/n] (selecting 'n' will DELETE it): ${NC}")" -n 1 -r
+      REPLY=${REPLY:-Y}
       echo ""
-      mkdir -p "$BACKUP_DIR"
-      mv "$HOME/.config/$module_name" "$BACKUP_DIR/$module_name"
-      print_success "Backup complete: $BACKUP_DIR/$module_name"
-      echo ""
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        mkdir -p "$BACKUP_DIR"
+        mv "$HOME/.config/$module_name" "$BACKUP_DIR/$module_name"
+        print_success "Backup complete: $BACKUP_DIR/$module_name"
+      else
+        print_warning "Deleting $module_name without backup..."
+        rm -rf "$HOME/.config/$module_name"
+      fi
+    fi
+
+    print_info "Copying $module_name to ~/.config..."
+    if cp -r "$SCRIPT_DIR/config_dots/$module_name" "$HOME/.config/$module_name"; then
+      print_success "$module_name copied"
     else
-      echo ""
-      rm -rf "$HOME/.config/$module_name"
+      print_error "Failed to copy $module_name"
+      continue
+    fi
+  done
+
+  echo ""
+  print_separator
+  print_success "Dotfiles synced..."
+  print_separator
+  echo ""
+
+  if command -v hyprctl &>/dev/null; then
+    print_info "Reloading Hyprland configurations..."
+    hyprctl reload 2>/dev/null && print_success "Hyprland reloaded" || print_warning "Hyprland not running, skipping reload"
+  fi
+}
+
+setup_wezterm_binary() {
+  local WEZTERM_BINARY="$1"
+  local WEZTERM_DEST="$2"
+  local LOCAL_BIN="$(dirname "$WEZTERM_DEST")"
+
+  mkdir -p "$LOCAL_BIN"
+
+  if [ -f "$WEZTERM_DEST" ]; then
+    if cmp -s "$WEZTERM_BINARY" "$WEZTERM_DEST"; then
+      print_success "WezTerm binary already up-to-date"
+      return 0
+    else
+      print_warning "WezTerm binary differs, updating..."
+      backup_file="${WEZTERM_DEST}.backup.$(date +%Y%m%d_%H%M%S)"
+      mv "$WEZTERM_DEST" "$backup_file"
+      print_info "Previous binary backed up to: $backup_file"
     fi
   fi
 
-  echo ""
-
-  print_info "Creating symlink for $module_name..."
-  ln -s "$SUBMODULE_PATH/config_dots/$module_name" "$HOME/.config/$module_name"
-  print_success "$module_name linked..."
-done
-
-echo ""
-print_separator
-print_success "Configurations synced..."
-print_separator
-echo ""
-
-sleep 0.3
-echo ""
-print_separator
-print_header "Setting up WezTerm..."
-print_separator
-echo ""
-sleep 0.3
-
-WEZTERM_DIR="$SUBMODULE_PATH/gitsources/wezterm"
-WEZTERM_BINARY="$WEZTERM_DIR/target/release/wezterm"
-LOCAL_BIN="$HOME/.local/bin"
-WEZTERM_LINK="$LOCAL_BIN/wezterm"
-
-setup_wezterm_symlink() {
-  mkdir -p "$LOCAL_BIN"
-  [ -e "$WEZTERM_LINK" ] && rm -f "$WEZTERM_LINK"
-  ln -s "$WEZTERM_BINARY" "$WEZTERM_LINK"
-  print_success "WezTerm symlink created: $WEZTERM_LINK"
+  cp -p "$WEZTERM_BINARY" "$WEZTERM_DEST"
+  print_success "WezTerm binary copied to: $WEZTERM_DEST"
 }
 
-if [ -f "$WEZTERM_BINARY" ]; then
-  print_info "WezTerm binary found, skipping build..."
-  if [ ! -L "$WEZTERM_LINK" ] || [ "$(readlink -f "$WEZTERM_LINK")" != "$(readlink -f "$WEZTERM_BINARY")" ]; then
-    setup_wezterm_symlink
-  else
-    print_success "WezTerm symlink already configured correctly"
-  fi
-else
-  print_info "Building WezTerm from source..."
+build_wezterm() {
+  local WEZTERM_DIR="$1"
+  local WEZTERM_BINARY="$2"
+  local WEZTERM_DEST="$3"
+  local should_exit_on_fail="${4:-false}"
 
-  command -v rustc &>/dev/null || {
-    print_info "Installing Rust..."
-    curl https://sh.rustup.rs -sSf | sh -s -- -y
-  }
-
-  [ ! -d "$WEZTERM_DIR" ] && {
-    print_info "Cloning WezTerm repository..."
-    git clone --depth=1 --branch=main --recursive https://github.com/wez/wezterm.git "$WEZTERM_DIR"
-  }
-
-  cd "$WEZTERM_DIR" || exit 1
+  cd "$WEZTERM_DIR" || return 1
   git submodule update --init --recursive
+
+  if [ ! -f "./get-deps" ]; then
+    print_error "./get-deps script not found"
+    cd "$SCRIPT_DIR" || return 1
+    [ "$should_exit_on_fail" = "true" ] && exit 1
+    return 1
+  fi
+
+  if [ ! -x "./get-deps" ]; then
+    chmod +x ./get-deps
+  fi
+
   ./get-deps
   cargo build --release
 
   if [ $? -eq 0 ]; then
-    print_success "WezTerm built..."
-    setup_wezterm_symlink
+    print_success "WezTerm built successfully"
+    cd "$SCRIPT_DIR" || return 1
+    setup_wezterm_binary "$WEZTERM_BINARY" "$WEZTERM_DEST"
+    return 0
   else
-    print_error "WezTerm build failed... Exiting..."
+    print_error "WezTerm build failed"
+    cd "$SCRIPT_DIR" || return 1
+    [ "$should_exit_on_fail" = "true" ] && exit 1
+    return 1
+  fi
+}
+
+update_wezterm() {
+  print_section "Setting up WezTerm..."
+
+  WEZTERM_DIR="$SCRIPT_DIR/gitsources/wezterm"
+  WEZTERM_BINARY="$WEZTERM_DIR/target/release/wezterm"
+  WEZTERM_DEST="$HOME/.local/bin/wezterm"
+
+  if [ -f "$WEZTERM_DEST" ]; then
+    print_info "WezTerm binary found at: $WEZTERM_DEST"
+    read -p "$(echo -e "${YELLOW}Rebuild WezTerm or skip? [r/S]: ${NC}")" -n 1 -r
+    REPLY=${REPLY:-S}
+    echo ""
+
+    if [[ $REPLY =~ ^[Rr]$ ]]; then
+      print_info "Rebuilding WezTerm from source..."
+
+      command -v rustc &>/dev/null || {
+        print_info "Installing Rust..."
+        curl https://sh.rustup.rs -sSf | sh -s -- -y
+        source "$HOME/.cargo/env"
+      }
+
+      [ ! -d "$WEZTERM_DIR" ] && {
+        print_info "Cloning WezTerm repository..."
+        git clone --depth=1 --branch=main --recursive https://github.com/wez/wezterm.git "$WEZTERM_DIR"
+      }
+
+      build_wezterm "$WEZTERM_DIR" "$WEZTERM_BINARY" "$WEZTERM_DEST" "true"
+    else
+      print_success "Skipping WezTerm build, using existing binary"
+    fi
+  elif [ -f "$WEZTERM_BINARY" ]; then
+    print_info "WezTerm binary found in build directory, copying..."
+    setup_wezterm_binary "$WEZTERM_BINARY" "$WEZTERM_DEST"
+  else
+    print_info "Building WezTerm from source..."
+
+    command -v rustc &>/dev/null || {
+      print_info "Installing Rust..."
+      curl https://sh.rustup.rs -sSf | sh -s -- -y
+      source "$HOME/.cargo/env"
+    }
+
+    [ ! -d "$WEZTERM_DIR" ] && {
+      print_info "Cloning WezTerm repository..."
+      git clone --depth=1 --branch=main --recursive https://github.com/wez/wezterm.git "$WEZTERM_DIR"
+    }
+
+    build_wezterm "$WEZTERM_DIR" "$WEZTERM_BINARY" "$WEZTERM_DEST" "true"
+  fi
+
+  echo ""
+  print_separator
+  print_success "WezTerm setup complete..."
+  print_separator
+  echo ""
+}
+
+update_wezterm_from_remote() {
+  print_section "Updating WezTerm from remote..."
+
+  WEZTERM_DIR="$SCRIPT_DIR/gitsources/wezterm"
+  WEZTERM_BINARY="$WEZTERM_DIR/target/release/wezterm"
+  WEZTERM_DEST="$HOME/.local/bin/wezterm"
+
+  print_info "Pulling latest WezTerm from remote..."
+  if ! git submodule update --init --remote --recursive gitsources/wezterm; then
+    print_error "Failed to update WezTerm submodule"
+    return 1
+  fi
+
+  if [ -f "$WEZTERM_BINARY" ]; then
+    print_info "Existing WezTerm binary found"
+    read -p "$(echo -e "${YELLOW}Rebuild WezTerm from source? [y/N]: ${NC}")" -n 1 -r
+    REPLY=${REPLY:-N}
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      print_info "Rebuilding WezTerm..."
+      build_wezterm "$WEZTERM_DIR" "$WEZTERM_BINARY" "$WEZTERM_DEST"
+    else
+      setup_wezterm_binary "$WEZTERM_BINARY" "$WEZTERM_DEST"
+    fi
+  else
+    print_info "No WezTerm binary found, building from source..."
+
+    command -v rustc &>/dev/null || {
+      print_info "Installing Rust..."
+      curl https://sh.rustup.rs -sSf | sh -s -- -y
+      source "$HOME/.cargo/env"
+    }
+
+    if [ ! -d "$WEZTERM_DIR" ]; then
+      print_error "WezTerm directory not found: $WEZTERM_DIR"
+      return 1
+    fi
+
+    build_wezterm "$WEZTERM_DIR" "$WEZTERM_BINARY" "$WEZTERM_DEST"
+  fi
+
+  echo ""
+  print_separator
+  print_success "WezTerm update complete..."
+  print_separator
+  echo ""
+}
+
+full_setup() {
+  print_section "Fetching ALL git submodules..."
+
+  if ! git submodule update --init --recursive; then
+    print_error "Failed to initialize git submodules"
     exit 1
   fi
 
-  cd "$SUBMODULE_PATH" || exit 1
-fi
+  print_section "Copying dotfiles to \$HOME/.config..."
 
-echo ""
-print_separator
-print_success "Dotfiles setup complete..."
-print_success "Reloading Hyprland Configurations..."
+  mkdir -p "$HOME/.config"
 
-hyprctl reload
+  for module_name in "quickshell" "hypr" "matugen" "wezterm"; do
+    if [ ! -d "$SCRIPT_DIR/config_dots/$module_name" ]; then
+      print_error "Submodule $module_name not found. Skipping..."
+      continue
+    fi
 
-print_success "DONE"
+    if [ -e "$HOME/.config/$module_name" ] || [ -L "$HOME/.config/$module_name" ]; then
+      BACKUP_DIR="$HOME/.config/Dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
+      read -p "$(echo -e "${YELLOW}Directory $module_name exists. Backup to $BACKUP_DIR? [Y/n] (selecting 'n' will DELETE it): ${NC}")" -n 1 -r
+      REPLY=${REPLY:-Y}
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo ""
+        mkdir -p "$BACKUP_DIR"
+        mv "$HOME/.config/$module_name" "$BACKUP_DIR/$module_name"
+        print_success "Backup complete: $BACKUP_DIR/$module_name"
+        echo ""
+      else
+        echo ""
+        print_warning "Deleting $module_name without backup..."
+        rm -rf "$HOME/.config/$module_name"
+      fi
+    fi
 
-print_separator
-echo ""
+    echo ""
+    print_info "Copying $module_name to ~/.config..."
+    if cp -r "$SCRIPT_DIR/config_dots/$module_name" "$HOME/.config/$module_name"; then
+      print_success "$module_name copied..."
+    else
+      print_error "Failed to copy $module_name"
+      continue
+    fi
+  done
+
+  echo ""
+  print_separator
+  print_success "Configurations synced..."
+  print_separator
+  echo ""
+
+  update_wezterm
+
+  create_setup_flag
+
+  echo ""
+  print_separator
+  print_success "Dotfiles setup complete..."
+
+  if command -v hyprctl &>/dev/null; then
+    print_info "Reloading Hyprland configurations..."
+    hyprctl reload 2>/dev/null && print_success "Hyprland reloaded" || print_warning "Hyprland not running"
+  fi
+
+  print_success "DONE"
+  print_separator
+  echo ""
+}
+
+main() {
+  clear
+  echo ""
+  print_error "################################################################"
+  print_error "#                                                              #"
+  print_error "# WARNING: This script will not work on non-Arch distributions #"
+  print_error "#                                                              #"
+  print_error "################################################################"
+  echo ""
+
+  if check_setup_flag; then
+    show_menu
+    handle_menu_choice
+  else
+    print_info "First-time setup detected..."
+    full_setup
+  fi
+}
+
+main
