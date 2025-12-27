@@ -16,5 +16,5 @@
 	branch = main
 [submodule "config_dots/quickshell"]
 	path = config_dots/quickshell
-	url = https://github.com/daviiiL/quickshell-new.git
+	url = https://github.com/daviiiL/quickshell.git
 	branch = main
