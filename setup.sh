@@ -159,7 +159,7 @@ update_dotfiles() {
 
     mkdir -p "$HOME/.config"
 
-    for module_name in "quickshell" "hypr" "matugen" "wezterm"; do
+    for module_name in "quickshell" "hypr" "matugen" "wezterm" "anyrun"; do
         if [ ! -d "$SCRIPT_DIR/config_dots/$module_name" ]; then
             print_error "Submodule $module_name not found. Run 'git submodule update --init' first."
             continue
@@ -331,7 +331,7 @@ full_setup() {
 
     mkdir -p "$HOME/.config"
 
-    for module_name in "quickshell" "hypr" "matugen" "wezterm"; do
+    for module_name in "quickshell" "hypr" "matugen" "wezterm" "anyrun"; do
         if [ ! -d "$SCRIPT_DIR/config_dots/$module_name" ]; then
             print_error "Submodule $module_name not found. Skipping..."
             continue
