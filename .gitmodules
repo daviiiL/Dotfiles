@@ -18,7 +18,3 @@
 	path = config_dots/quickshell
 	url = https://github.com/daviiiL/quickshell.git
 	branch = main
-[submodule "config_dots/anyrun"]
-	path = config_dots/anyrun
-	url = https://github.com/daviiiL/anyrun.git
-	branch = main
