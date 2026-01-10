@@ -1,7 +1,7 @@
 [submodule "config_dots/matugen"]
 	path = config_dots/matugen
 	url = https://github.com/daviiiL/matugen.git
-	branch = main
+	branch = niri
 [submodule "config_dots/quickshell"]
 	path = config_dots/quickshell
 	url = https://github.com/daviiiL/quickshell.git
